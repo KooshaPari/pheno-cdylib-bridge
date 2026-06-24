@@ -1,0 +1,50 @@
+# pheno-cdylib-bridge
+
+> C-ABI shared library exposing the pheno-* Rust crates to Go (forgecode) and other FFI consumers.
+
+## What this is
+
+A thin Rust crate that compiles to a `cdylib` (`libpheno_bridge.so` / `.dylib` / `.dll`) and a `staticlib` (`libpheno_bridge.a`) and exposes a C-ABI surface over:
+
+- **thegent-memory v2** — the polyglot memory port (`MemoryPort` trait + 4 adapters + `CompositeAdapter`)
+
+The primary consumer is the upstream [`antinomyhq/forgecode`](https://github.com/antinomyhq/forgecode) agent CLI; the bridge lets forgecode load our pure-Rust crates via `cgo` or `plugin.Open()` without rewriting them in Go.
+
+## Why this exists
+
+Per ADR-096, the locked approach to improving forgecode is to keep forgecode as the agent CLI and add capability around it via sidecars (per-machine systemd units, see `KooshaPari/pheno-forge-plugins`) and via direct bindings (Rust crates linked into the Go binary). The bridge is the binding layer.
+
+## API
+
+```c
+const char *pheno_bridge_version(void);
+const char *pheno_last_error(void);
+void        pheno_string_free(char *s);
+void       *pheno_memory_new(const char *provider);
+int         pheno_memory_store(void *handle, const char *scope,
+                                const char *key, const char *value);
+int         pheno_memory_recall(void *handle, const char *scope,
+                                 const char *query, char **out);
+int         pheno_memory_forget(void *handle, const char *scope,
+                                 const char *key);
+void        pheno_memory_free(void *handle);
+```
+
+## Status
+
+v0.1.0 (2026-06-23). PR 3 of the 3-PR forgecode improvement sequence.
+
+- PR 1 — `KooshaPari/pheno-forge-plugins` v0.1.0 (6 plugins + systemd target).
+- PR 2 — `KooshaPari/thegent#1144` (memory port + 4 adapters + composite router).
+- PR 3 — `KooshaPari/pheno-cdylib-bridge` v0.1.0 (this crate; C-ABI).
+
+## Refs
+
+- ADR-096 — forgecode improvement decision.
+- `findings/2026-06-23-forgecode-improvement-plan.md` — master plan.
+- `thegent/docs/specs/cdylib-bridge/v1.md` — canonical SPEC.
+- `thegent/docs/specs/memory/v2.md` — underlying memory port spec.
+
+## License
+
+Dual-licensed under MIT or Apache-2.0, at your option.

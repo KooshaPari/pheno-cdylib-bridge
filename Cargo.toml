@@ -1,0 +1,28 @@
+[package]
+name = "pheno-cdylib-bridge"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "C-ABI shared library exposing the pheno-* Rust crates to Go (forgecode) and other FFI consumers"
+repository = "https://github.com/KooshaPari/pheno-cdylib-bridge"
+
+[lib]
+name = "pheno_bridge"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# Memory facade (v2) — PR 2 of the forgecode improvement sequence.
+# Path is relative to this crate's location at repos/pheno-cdylib-bridge/.
+thegent-memory = { path = "../thegent-pr2-v2/crates/thegent-memory" }
+tokio = { version = "1.49", features = ["rt-multi-thread", "macros", "sync"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+once_cell = "1.20"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio = { version = "1.49", features = ["full"] }
+
+# Tests that exercise the C ABI are in tests/ffi_smoke.rs and run via `cargo test`.
+# Cross-language smoke is in c/examples/ and built by scripts/build-c-smoke.sh.
