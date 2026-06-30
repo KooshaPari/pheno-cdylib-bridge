@@ -44,6 +44,10 @@
 //! into different handles concurrently. A single handle is also safe to
 //! share across threads (the underlying port is async + thread-safe).
 
+// All public functions receive/send raw C pointers; clippy warnings about
+// unsafe pointer args are the expected FFI pattern here.
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::Arc;
@@ -53,6 +57,7 @@ use thegent_memory::v2::{
     CogneeAdapter, CompositeAdapter, LettaAdapter, MemoryPort, MemoryProvider, MemoryQuery,
     MemoryScope, MemoryValue, Mem0Adapter, SupermemoryAdapter,
 };
+use tracing::{error, instrument};
 
 /// Opaque handle to a memory port. Internally a `Box<dyn MemoryPort>`,
 /// but we hide it as `c_void` per the FFI contract.
@@ -66,12 +71,15 @@ struct PortHandle {
 static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
 fn record_error(e: impl ToString) {
-    *LAST_ERROR.lock() = Some(e.to_string());
+    let msg = e.to_string();
+    error!(msg);
+    *LAST_ERROR.lock() = Some(msg);
 }
 
 /// Returns the most recent error message as a static `*const c_char`.
 /// The string is owned by the bridge; do NOT free it from C. Returns
 /// `NULL` if no error has been recorded.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_last_error() -> *const c_char {
     match LAST_ERROR.lock().as_ref() {
@@ -86,6 +94,7 @@ pub extern "C" fn pheno_last_error() -> *const c_char {
 /// Free a string returned by the bridge (e.g. `*out` from
 /// `pheno_memory_recall`). Calling `free()` directly would work on
 /// glibc but is technically UB — use this function to be portable.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_string_free(s: *mut c_char) {
     if s.is_null() {
@@ -97,6 +106,7 @@ pub extern "C" fn pheno_string_free(s: *mut c_char) {
 }
 
 /// Returns the bridge version as a static `*const c_char`.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_bridge_version() -> *const c_char {
     // Leaked once; lifetime is `'static` for the process.
@@ -156,6 +166,7 @@ fn scope_from_str(s: &str) -> Result<MemoryScope, c_int> {
 /// for any other value, returns a single-scope adapter.
 ///
 /// Returns a non-null opaque handle on success, `NULL` on failure.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_memory_new(provider: *const c_char) -> *mut c_void {
     let provider_str = match cstr(provider) {
@@ -187,6 +198,7 @@ pub extern "C" fn pheno_memory_new(provider: *const c_char) -> *mut c_void {
 /// Store `value` under (`scope`, `key`) on the port identified by
 /// `handle`. Returns 0 on success, non-zero on failure (see module
 /// docs).
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_memory_store(
     handle: *mut c_void,
@@ -224,6 +236,7 @@ pub extern "C" fn pheno_memory_store(
 /// Run a recall query and serialize the result as JSON. On success,
 /// `*out` is set to a heap-allocated C string the caller MUST free
 /// with `pheno_string_free`.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_memory_recall(
     handle: *mut c_void,
@@ -249,6 +262,8 @@ pub extern "C" fn pheno_memory_recall(
         Ok(recs) => match serde_json::to_string(&recs) {
             Ok(s) => match CString::new(s) {
                 Ok(c) => {
+                    // SAFETY: `out` is a non-null pointer provided by
+                    // the caller to receive the result string.
                     unsafe { *out = c.into_raw() };
                     0
                 }
@@ -270,6 +285,7 @@ pub extern "C" fn pheno_memory_recall(
 }
 
 /// Delete (`scope`, `key`).
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_memory_forget(
     handle: *mut c_void,
@@ -300,6 +316,7 @@ pub extern "C" fn pheno_memory_forget(
 
 /// Close the port and free the handle. After this call `handle` is
 /// invalid.
+#[instrument(skip_all)]
 #[no_mangle]
 pub extern "C" fn pheno_memory_free(handle: *mut c_void) {
     if handle.is_null() {
