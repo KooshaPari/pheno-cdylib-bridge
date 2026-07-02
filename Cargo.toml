@@ -8,7 +8,7 @@ repository = "https://github.com/KooshaPari/pheno-cdylib-bridge"
 
 [lib]
 name = "pheno_bridge"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 # Memory facade (v2) — PR 2 of the forgecode improvement sequence.
